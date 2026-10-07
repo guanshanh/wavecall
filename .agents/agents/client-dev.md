@@ -1,6 +1,5 @@
 ---
 name: client-dev
-model: sonnet
 description: Tauri + React 前端开发专家，负责客户端 UI 和 WebRTC 交互逻辑
 tools:
   - Bash

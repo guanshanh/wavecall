@@ -1,0 +1,11 @@
+# Shared cluster table: dispatch and each SFU read the same file.
+# - dispatch: hashes roomId → nodes.*.signaling
+# - SFU:      -cluster-config this file -node <id> → public_ip / udp_port (/ listen port from signaling)
+
+[dispatch]
+bind = ":18090"
+
+[nodes.n1]
+signaling = "127.0.0.1:18080"
+public_ip = "127.0.0.1"
+udp_port = 18081

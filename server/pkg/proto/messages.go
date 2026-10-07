@@ -7,7 +7,6 @@ const (
 	// Client → Server
 	TypeJoin      MessageType = "join"
 	TypeLeave     MessageType = "leave"
-	TypeOffer     MessageType = "offer"
 	TypeAnswer    MessageType = "answer"
 	TypeCandidate MessageType = "candidate"
 	TypeMute      MessageType = "mute"
@@ -18,6 +17,7 @@ const (
 	TypePeerJoined MessageType = "peerJoined"
 	TypePeerLeft   MessageType = "peerLeft"
 	TypePeerMuted  MessageType = "peerMuted"
+	TypeOffer      MessageType = "offer"
 	TypeSpeaking   MessageType = "speaking"
 	TypeError      MessageType = "error"
 )
@@ -42,25 +42,31 @@ type LeaveMessage struct {
 	Type MessageType `json:"type"`
 }
 
-// OfferMessage carries an SDP offer from a client.
+// OfferMessage carries an SDP offer. In SFU mode the server initiates all
+// negotiation, so offers flow Server → Client only.
 type OfferMessage struct {
 	Type     MessageType `json:"type"`
 	TargetID string      `json:"targetId"`
 	SDP      string      `json:"sdp"`
 }
 
-// AnswerMessage carries an SDP answer from a client.
+// AnswerMessage carries an SDP answer from a client, replying to the
+// server-initiated offer.
 type AnswerMessage struct {
 	Type     MessageType `json:"type"`
 	TargetID string      `json:"targetId"`
 	SDP      string      `json:"sdp"`
 }
 
-// CandidateMessage carries an ICE candidate.
+// CandidateMessage carries an ICE candidate (Trickle ICE).
+// Browsers require sdpMid and/or sdpMLineIndex when calling addIceCandidate;
+// SDPMLineIndex is a pointer so 0 is preserved in JSON.
 type CandidateMessage struct {
-	Type      MessageType `json:"type"`
-	TargetID  string      `json:"targetId"`
-	Candidate string      `json:"candidate"`
+	Type          MessageType `json:"type"`
+	TargetID      string      `json:"targetId"`
+	Candidate     string      `json:"candidate"`
+	SDPMid        string      `json:"sdpMid,omitempty"`
+	SDPMLineIndex *uint16     `json:"sdpMLineIndex,omitempty"`
 }
 
 // MuteMessage is sent when a client mutes/unmutes.

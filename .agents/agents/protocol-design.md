@@ -1,6 +1,5 @@
 ---
 name: protocol-design
-model: sonnet
 description: 实时通信协议设计师，负责信令消息格式定义和前后端类型同步
 tools:
   - Read

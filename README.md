@@ -28,19 +28,25 @@
 - Node.js 20+
 - Rust 1.75+ (桌面端)
 
-### 启动服务端
+### 启动服务端（SFU + 调度器）
+
+本地进房需要**同时**跑 SFU 与调度器，并在客户端配置 `VITE_DISPATCH_URL`。
 
 ```bash
+# 终端 1：SFU（从共享集群表读 n1 的 public_ip / udp_port / 端口）
 cd server
-go run ./cmd/server
-```
+go run ./cmd/server -cluster-config configs/cluster.example.toml -node n1
 
-服务端默认监听 `:8080`。
+# 终端 2：调度器（同一份集群表）
+cd server
+go run ./cmd/dispatch -config configs/cluster.example.toml
+```
 
 ### 启动客户端（Web 开发模式）
 
 ```bash
 cd client
+cp .env.example .env   # VITE_DISPATCH_URL=http://127.0.0.1:18090
 npm install
 npm run dev
 ```
@@ -51,36 +57,38 @@ npm run dev
 
 ```bash
 cd client
+cp .env.example .env   # 与 Web 模式相同，填写 VITE_DISPATCH_URL
 npm install
 npm run tauri dev
 ```
 
-### Docker 部署
+### 部署到服务器
 
-```bash
-docker compose up -d
-```
+参见[部署指南](docs/deployment.md)。
 
 ## 项目结构
 
 ```
 wavecall/
-├── server/          # Go 服务端 (SFU + 信令)
-│   ├── cmd/server/  # 入口
-│   ├── internal/    # signaling / sfu / room / config
+├── server/          # Go 服务端
+│   ├── cmd/server/  # SFU + 信令
+│   ├── cmd/dispatch/# 调度器
+│   ├── configs/     # cluster.example.toml（调度 + SFU 共用）
+│   ├── internal/    # signaling / sfu / room / config / dispatch
 │   └── pkg/proto/   # 消息结构体
 ├── client/          # Tauri + React 客户端
 │   ├── src-tauri/   # Rust 层 (窗口/托盘/快捷键)
 │   └── src/         # React 前端
-├── docs/            # 协议文档 + 架构说明
-└── docker-compose.yml
+├── docs/            # 基础概念、协议、架构、部署、扩容
 ```
 
 ## 文档
 
+- [基础概念（SFU / ICE / SDP / 调度）](docs/concepts.md)
 - [架构设计](docs/architecture.md)
 - [信令协议](docs/protocol.md)
 - [部署指南](docs/deployment.md)
+- [多节点扩容](docs/scaling.md)
 
 ## License
 

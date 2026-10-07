@@ -6,7 +6,7 @@ import type { ClientMessage, ServerMessage } from "../types/protocol";
  * useSignaling — manages WebSocket connection lifecycle within React.
  */
 export function useSignaling(
-  serverUrl: string,
+  getUrl: () => Promise<string>,
   onMessage: (msg: ServerMessage) => void,
   onStateChange?: (state: ConnectionState) => void,
 ) {
@@ -19,18 +19,18 @@ export function useSignaling(
 
   useEffect(() => {
     const client = new SignalingClient(
-      serverUrl,
+      getUrl,
       (msg) => onMessageRef.current?.(msg),
       (state) => onStateChangeRef.current?.(state),
     );
     clientRef.current = client;
-    client.connect();
+    void client.connect();
 
     return () => {
       client.disconnect();
       clientRef.current = null;
     };
-  }, [serverUrl]);
+  }, [getUrl]);
 
   const send = useCallback((message: ClientMessage) => {
     clientRef.current?.send(message);

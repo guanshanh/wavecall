@@ -4,7 +4,6 @@ export interface PeerState {
   userId: string;
   userName: string;
   muted: boolean;
-  speaking: boolean;
 }
 
 interface RoomState {
@@ -25,7 +24,6 @@ interface RoomState {
   addPeer: (peer: PeerState) => void;
   removePeer: (userId: string) => void;
   setPeerMuted: (userId: string, muted: boolean) => void;
-  setPeerSpeaking: (userId: string, speaking: boolean) => void;
   toggleMute: () => void;
   reset: () => void;
 }
@@ -56,13 +54,6 @@ export const useRoomStore = create<RoomState>((set) => ({
     set((state) => ({
       peers: state.peers.map((p) =>
         p.userId === userId ? { ...p, muted } : p,
-      ),
-    })),
-
-  setPeerSpeaking: (userId, speaking) =>
-    set((state) => ({
-      peers: state.peers.map((p) =>
-        p.userId === userId ? { ...p, speaking } : p,
       ),
     })),
 

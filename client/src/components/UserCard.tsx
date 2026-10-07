@@ -4,10 +4,13 @@ interface UserCardProps {
   userName: string;
   isMuted: boolean;
   isSelf: boolean;
-  speaking: boolean;
+  /** Real-time RMS level 0..1 from AudioLevelMonitor */
+  level: number;
 }
 
-export default function UserCard({ userName, isMuted, isSelf, speaking }: UserCardProps) {
+export default function UserCard({ userName, isMuted, isSelf, level }: UserCardProps) {
+  const speaking = !isMuted && level > 0.1;
+
   return (
     <div
       className={`relative bg-gray-800 rounded-xl p-4 flex flex-col items-center gap-3 transition-all ${
@@ -33,7 +36,7 @@ export default function UserCard({ userName, isMuted, isSelf, speaking }: UserCa
       )}
 
       {/* Volume indicator */}
-      {!isMuted && <VolumeIndicator level={speaking ? 0.7 : 0} />}
+      <VolumeIndicator level={level} />
     </div>
   );
 }

@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/pion/ice/v2"
+	"github.com/pion/webrtc/v4"
+
 	"github.com/guanshanh/wavecall/internal/config"
 	"github.com/guanshanh/wavecall/internal/room"
+	"github.com/guanshanh/wavecall/internal/sfu"
 	"github.com/guanshanh/wavecall/pkg/proto"
 )
 
@@ -27,6 +32,11 @@ type Handler struct {
 	config  *config.Config
 	mu      sync.Mutex
 
+	// api 非 nil 表示已启用单端口媒体复用：SettingEngine 携带 ICE UDPMux，
+	// 并在配置了 PublicIP 时把 host 候选直接改写为公网地址（无需 STUN）。
+	api    *webrtc.API
+	udpMux ice.UDPMux
+
 	// roomID -> (userID -> *Client)
 	roomClients map[string]map[string]*Client
 
@@ -40,13 +50,51 @@ type clientMeta struct {
 	userName string
 }
 
-// NewHandler creates a new signaling handler.
-func NewHandler(manager *room.Manager, cfg *config.Config) *Handler {
-	return &Handler{
+// NewHandler creates a new signaling handler. When cfg.UDPPort > 0 all peer
+// connections share one UDP socket (UDPMux); with cfg.PublicIP set, host
+// candidates are rewritten to the public IP so no STUN server is needed.
+func NewHandler(manager *room.Manager, cfg *config.Config) (*Handler, error) {
+	h := &Handler{
 		manager:     manager,
 		config:      cfg,
 		roomClients: make(map[string]map[string]*Client),
 		clientMeta:  make(map[*Client]clientMeta),
+	}
+
+	if cfg.UDPPort > 0 {
+		se := webrtc.SettingEngine{}
+		udpMux, err := ice.NewMultiUDPMuxFromPort(cfg.UDPPort)
+		if err != nil {
+			return nil, fmt.Errorf("create udp mux on port %d: %w", cfg.UDPPort, err)
+		}
+		h.udpMux = udpMux
+		se.SetICEUDPMux(h.udpMux)
+		if cfg.PublicIP != "" {
+			// Rewrite host candidates to the configured address, and ignore
+			// other interfaces (docker / VPN TUN like 198.18.0.1) so clients
+			// don't try unreachable ICE paths.
+			pubIP := net.ParseIP(cfg.PublicIP)
+			if pubIP == nil {
+				return nil, fmt.Errorf("invalid public-ip %q", cfg.PublicIP)
+			}
+			se.SetNAT1To1IPs([]string{cfg.PublicIP}, webrtc.ICECandidateTypeHost)
+			se.SetIPFilter(func(ip net.IP) bool {
+				return ip.Equal(pubIP)
+			})
+		}
+		h.api = webrtc.NewAPI(webrtc.WithSettingEngine(se))
+		slog.Info("udp mux enabled", "port", cfg.UDPPort, "publicIP", cfg.PublicIP)
+	}
+
+	return h, nil
+}
+
+// Close releases shared resources (the UDP mux socket).
+func (h *Handler) Close() {
+	if h.udpMux != nil {
+		if err := h.udpMux.Close(); err != nil {
+			slog.Warn("failed to close udp mux", "err", err)
+		}
 	}
 }
 
@@ -112,11 +160,8 @@ func (h *Handler) routeMessage(client *Client, raw []byte) {
 		h.handleLeave(client)
 
 	case proto.TypeOffer:
-		var msg proto.OfferMessage
-		if err := json.Unmarshal(raw, &msg); err != nil {
-			return
-		}
-		h.handleOffer(client, &msg)
+		// SFU 模式下协商由服务端发起，客户端不应发送 offer
+		slog.Warn("unexpected offer from client (SFU initiates negotiation)")
 
 	case proto.TypeAnswer:
 		var msg proto.AnswerMessage
@@ -234,7 +279,67 @@ func (h *Handler) handleJoin(client *Client, msg *proto.JoinMessage) {
 		}
 	}
 
+	// 3. 创建 SFU Peer 并发起初始协商（joined 先行发出，客户端需先拿到 userId 才能回复 answer）
+	if err := h.setupPeer(client, r, userID); err != nil {
+		_ = client.Send(proto.ErrorMessage{
+			Type:    proto.TypeError,
+			Code:    "PEER_SETUP_FAILED",
+			Message: "媒体连接建立失败，请重新加入",
+		})
+		slog.Error("failed to setup sfu peer", "room", msg.RoomID, "userId", userID, "err", err)
+		return
+	}
+
 	slog.Info("user joined room", "room", msg.RoomID, "user", msg.UserName, "userId", userID, "totalPeers", r.PeerCount())
+}
+
+// setupPeer creates the SFU Peer for a freshly joined user, attaches every
+// track already published in the room, and kicks off the initial offer.
+func (h *Handler) setupPeer(client *Client, r *room.Room, userID string) error {
+	iceServers := make([]webrtc.ICEServer, 0)
+	for _, s := range h.config.ICEServers() {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs:       s.URLs,
+			Username:   s.Username,
+			Credential: s.Credential,
+		})
+	}
+
+	peer, err := sfu.NewPeer(userID, iceServers, h.api,
+		func(sdp string) {
+			_ = client.Send(proto.OfferMessage{
+				Type:     proto.TypeOffer,
+				TargetID: userID,
+				SDP:      sdp,
+			})
+		},
+		func(c webrtc.ICECandidateInit) {
+			msg := proto.CandidateMessage{
+				Type:      proto.TypeCandidate,
+				TargetID:  userID,
+				Candidate: c.Candidate,
+			}
+			if c.SDPMid != nil {
+				msg.SDPMid = *c.SDPMid
+			}
+			msg.SDPMLineIndex = c.SDPMLineIndex
+			slog.Debug("send ice candidate", "userId", userID, "candidate", c.Candidate, "sdpMid", msg.SDPMid, "sdpMLineIndex", msg.SDPMLineIndex)
+			_ = client.Send(msg)
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create peer: %w", err)
+	}
+
+	router := r.Router()
+	router.AddPeer(peer)
+	router.AttachPublishedTracks(peer)
+
+	if err := peer.Start(); err != nil {
+		router.RemovePeer(userID)
+		return fmt.Errorf("start negotiation: %w", err)
+	}
+	return nil
 }
 
 // handleLeave processes an explicit leave request.
@@ -242,19 +347,64 @@ func (h *Handler) handleLeave(client *Client) {
 	h.handleDisconnect(client)
 }
 
-// handleOffer forwards an SDP offer for WebRTC negotiation.
-func (h *Handler) handleOffer(client *Client, msg *proto.OfferMessage) {
-	slog.Debug("offer received", "target", msg.TargetID)
-}
-
-// handleAnswer forwards an SDP answer for WebRTC negotiation.
+// handleAnswer applies the client's SDP answer to its SFU PeerConnection.
 func (h *Handler) handleAnswer(client *Client, msg *proto.AnswerMessage) {
-	slog.Debug("answer received", "target", msg.TargetID)
+	meta, ok := h.clientMetaOf(client)
+	if !ok {
+		return
+	}
+
+	r, err := h.manager.Get(meta.roomID)
+	if err != nil {
+		return
+	}
+	peer := r.Router().Peer(meta.userID)
+	if peer == nil {
+		return
+	}
+
+	if err := peer.HandleRemoteAnswer(msg.SDP); err != nil {
+		slog.Error("failed to handle answer", "room", meta.roomID, "userId", meta.userID, "err", err)
+	}
 }
 
-// handleCandidate forwards an ICE candidate.
+// handleCandidate forwards an ICE candidate to the client's SFU PeerConnection.
 func (h *Handler) handleCandidate(client *Client, msg *proto.CandidateMessage) {
-	slog.Debug("candidate received", "target", msg.TargetID)
+	if msg.Candidate == "" {
+		return
+	}
+
+	meta, ok := h.clientMetaOf(client)
+	if !ok {
+		return
+	}
+
+	r, err := h.manager.Get(meta.roomID)
+	if err != nil {
+		return
+	}
+	peer := r.Router().Peer(meta.userID)
+	if peer == nil {
+		return
+	}
+
+	init := webrtc.ICECandidateInit{Candidate: msg.Candidate}
+	if msg.SDPMid != "" {
+		mid := msg.SDPMid
+		init.SDPMid = &mid
+	}
+	init.SDPMLineIndex = msg.SDPMLineIndex
+	if err := peer.HandleRemoteCandidate(init); err != nil {
+		slog.Error("failed to add ICE candidate", "room", meta.roomID, "userId", meta.userID, "err", err)
+	}
+}
+
+// clientMetaOf returns the room/user metadata registered for a client.
+func (h *Handler) clientMetaOf(client *Client) (clientMeta, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	meta, ok := h.clientMeta[client]
+	return meta, ok
 }
 
 // handleMuteToggle processes mute/unmute state changes.

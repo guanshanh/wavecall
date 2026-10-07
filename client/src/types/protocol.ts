@@ -3,12 +3,13 @@
 //   - server/pkg/proto/messages.go (Go structs)
 
 // --- Message types ---
+// SFU 模式：协商由服务端发起，offer 为 S→C，answer 为 C→S，
+// candidate 双向（Trickle ICE）。
 
 export type MessageType =
   // Client → Server
   | "join"
   | "leave"
-  | "offer"
   | "answer"
   | "candidate"
   | "mute"
@@ -18,6 +19,7 @@ export type MessageType =
   | "peerJoined"
   | "peerLeft"
   | "peerMuted"
+  | "offer"
   | "speaking"
   | "error";
 
@@ -34,12 +36,6 @@ export interface LeaveMessage {
   type: "leave";
 }
 
-export interface OfferMessage {
-  type: "offer";
-  targetId: string;
-  sdp: string;
-}
-
 export interface AnswerMessage {
   type: "answer";
   targetId: string;
@@ -50,6 +46,9 @@ export interface CandidateMessage {
   type: "candidate";
   targetId: string;
   candidate: string;
+  /** Required by browsers together with / instead of sdpMLineIndex */
+  sdpMid?: string;
+  sdpMLineIndex?: number;
 }
 
 export interface MuteMessage {
@@ -95,6 +94,12 @@ export interface PeerMutedMessage {
   muted: boolean;
 }
 
+export interface OfferMessage {
+  type: "offer";
+  targetId: string;
+  sdp: string;
+}
+
 export interface SpeakingMessage {
   type: "speaking";
   userId: string;
@@ -112,7 +117,6 @@ export interface ErrorMessage {
 export type ClientMessage =
   | JoinMessage
   | LeaveMessage
-  | OfferMessage
   | AnswerMessage
   | CandidateMessage
   | MuteMessage;
@@ -122,6 +126,8 @@ export type ServerMessage =
   | PeerJoinedMessage
   | PeerLeftMessage
   | PeerMutedMessage
+  | OfferMessage
+  | CandidateMessage
   | SpeakingMessage
   | ErrorMessage;
 

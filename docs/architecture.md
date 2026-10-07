@@ -1,5 +1,7 @@
 # Wavecall 架构
 
+SFU、PeerConnection、ICE、SDP、STUN/TURN、调度与媒体地址等名词说明见 [基础概念](concepts.md)。
+
 ## 总体架构
 
 ```
@@ -12,7 +14,7 @@
 │  └────┬─────┘  └──────┬───────┘  └───────────────────┘  │
 │       │               │                                  │
 │  ┌────▼───────────────▼────────┐                        │
-│  │   WebSocket (信令通道)       │                        │
+│  │  先 HTTP 问调度，再 WebSocket │                        │
 │  └──────────────┬──────────────┘                        │
 └─────────────────┼───────────────────────────────────────┘
                   │
@@ -20,25 +22,33 @@
          │   互联网 / NAT   │
          └────────┬────────┘
                   │
+     ┌────────────▼────────────┐
+     │  调度器 cmd/dispatch     │
+     │  GET /dispatch?room=    │
+     │  共享集群表，哈希选一台   │
+     └────────────┬────────────┘
+                  │ {"node":"host:port"}
 ┌─────────────────▼───────────────────────────────────────┐
-│                  服务器 (Go)                              │
+│                  SFU 节点 (Go)                            │
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐   │
-│  │  HTTP Server (net/http)                           │   │
-│  │  ├── /ws       → WebSocket 信令入口               │   │
-│  │  └── /health   → 健康检查                         │   │
+│  │  HTTP Server                                      │   │
+│  │  ├── /ws       → WebSocket 信令                   │   │
+│  │  ├── /health   → 健康检查                         │   │
+│  │  └── /         → 可选托管 Web 客户端（-web）       │   │
 │  └──────────────────┬───────────────────────────────┘   │
 │                     │                                    │
 │  ┌──────────────────▼───────────────────────────────┐   │
 │  │  Signaling Handler                                │   │
-│  │  WebSocket 连接管理 + 消息路由                      │   │
+│  │  服务端发起 offer；answer / candidate 回到本连接   │   │
 │  └──────────────────┬───────────────────────────────┘   │
 │                     │                                    │
 │  ┌──────────────────▼──────────┐ ┌──────────────────┐   │
 │  │  Room Manager               │ │  SFU Router       │   │
-│  │  房间 CRUD + 成员管理        │ │  Pion WebRTC      │   │
-│  │  peers map[userId]PeerState │ │  Track 转发        │   │
+│  │  房间与成员（纯内存）        │ │  Pion WebRTC      │   │
+│  │                             │ │  RTP 原样转发      │   │
 │  └─────────────────────────────┘ └──────────────────┘   │
+│  媒体：集群表 udp_port + public_ip 写入 ICE host 候选     │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -58,13 +68,18 @@
 
 ## 数据流
 
-### 信令流（WebSocket）
+### 进房与信令（先调度，再 WebSocket）
 
 ```
-join → 服务端创建 PeerConnection → 返回 joined (含 ICE servers)
-    → 客户端创建 PeerConnection → 交换 offer/answer/candidate
-    → WebRTC 连接建立
+GET /dispatch?room=… → {"node":"host:port"}
+    → 对该节点建立 WebSocket
+    → join → joined（含 userId、已有成员、iceServers）
+    → 服务端发 offer（S→C），客户端回 answer（C→S）
+    → candidate 双向 Trickle ICE
+    → 新人发布音频时，服务端再发一次重协商 offer
 ```
+
+客户端不发送 offer。`iceServers` 在配置了节点 `public_ip` 时通常为空，媒体地址写在服务端的 host 候选里。
 
 ### 媒体流（WebRTC / UDP）
 
@@ -78,25 +93,29 @@ join → 服务端创建 PeerConnection → 返回 joined (含 ICE servers)
 
 | 模块 | 位置 | 职责 |
 |------|------|------|
-| Config | `server/internal/config/` | 服务器配置（端口、ICE 服务器地址） |
-| Signaling | `server/internal/signaling/` | WebSocket 连接管理、消息解析路由 |
+| Config | `server/internal/config/` | SFU 端口、公网 IP、可选 STUN/TURN |
+| Dispatch | `server/cmd/dispatch`、`server/internal/dispatch/` | 独立进程：读共享集群表的 signaling，按房间哈希返回 |
+| Signaling | `server/internal/signaling/` | WebSocket 连接管理、消息解析、发起协商 |
 | Room | `server/internal/room/` | 房间生命周期、成员管理 |
-| SFU | `server/internal/sfu/` | PeerConnection 管理、Track 转发 |
+| SFU | `server/internal/sfu/` | PeerConnection 管理、RTP 转发 |
 | Proto | `server/pkg/proto/` | 信令消息结构体定义 |
 
 ## 部署架构
 
+单节点时调度器与 SFU 可以在同一台机器上，客户端路径与多节点相同。前端由 SFU 的 `-web` 托管，不单独放到静态站点。
+
 ```
-┌──────────────────────┐      ┌──────────────────────┐
-│  Cloudflare Pages    │      │  3M 轻量云            │
-│  (前端静态资源)       │      │                       │
-│  wavecall.pages.dev  │      │  ┌─────────────────┐  │
-└──────────┬───────────┘      │  │  Go Server      │  │
-           │                  │  │  :8080           │  │
-           │  加载前端         │  └─────────────────┘  │
-           ▼                  │  ┌─────────────────┐  │
-       浏览器/Tauri ──WS+RTC──▶  │  coturn (TURN)  │  │
-                              │  │  :3478           │  │
-                              │  └─────────────────┘  │
-                              └──────────────────────┘
+浏览器 / Tauri
+    │  GET /dispatch?room=
+    ▼
+调度器 :18090 与 SFU 共用 cluster.toml
+    │  调度只返回 signaling
+    │  {"node":"host:18080"}
+    ▼
+SFU 节点（-cluster-config + -node）
+    :18080 TCP   信令 + 可选 Web 静态文件
+    :18081 UDP   全部 WebRTC 媒体（UDPMux）
+    ICE host 候选 = 表内 public_ip（TURN 未接线）
 ```
+
+加节点只改共享集群表。房间仍整房落在被选中的那一台 SFU 上，节点之间不转发媒体。见 [多节点扩容](scaling.md)。

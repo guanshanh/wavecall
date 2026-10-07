@@ -3,7 +3,9 @@ package config
 // Config holds all server configuration.
 type Config struct {
 	Port       int    // HTTP/WebSocket listen port
-	STUNServer string // STUN server address for ICE
+	PublicIP   string // server public IP; advertised to clients directly (required on cloud VMs with 1:1 NAT)
+	UDPPort    int    // single UDP port for WebRTC media (UDPMux); 0 = ephemeral ports
+	STUNServer string // optional STUN server fallback; empty = none
 	TURNServer string // TURN server address for ICE relay
 	TURNUser   string // TURN username
 	TURNPass   string // TURN password
@@ -12,8 +14,9 @@ type Config struct {
 // Default returns a Config with sensible defaults.
 func Default() *Config {
 	return &Config{
-		Port:       8080,
-		STUNServer: "stun:stun.l.google.com:19302",
+		Port:       18080,
+		UDPPort:    18081,
+		STUNServer: "",
 		TURNServer: "",
 		TURNUser:   "",
 		TURNPass:   "",
@@ -22,8 +25,9 @@ func Default() *Config {
 
 // ICEServers returns the ICE server configuration for WebRTC PeerConnections.
 func (c *Config) ICEServers() []ICEServer {
-	servers := []ICEServer{
-		{URLs: []string{c.STUNServer}},
+	var servers []ICEServer
+	if c.STUNServer != "" {
+		servers = append(servers, ICEServer{URLs: []string{c.STUNServer}})
 	}
 	if c.TURNServer != "" {
 		servers = append(servers, ICEServer{

@@ -1,5 +1,7 @@
 # Go
 server/bin/
+server/wavecall-server
+server/wavecall-dispatch
 *.exe
 *.exe~
 *.dll
@@ -15,6 +17,9 @@ client/.vite/
 # Rust / Tauri
 client/src-tauri/target/
 client/src-tauri/gen/
+
+# Agent session artifacts
+.superpowers/
 
 # IDE
 .vscode/

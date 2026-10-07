@@ -1,6 +1,5 @@
 ---
 name: server-dev
-model: sonnet
 description: Go 服务端开发专家，负责 SFU 引擎、信令服务器和房间管理
 tools:
   - Bash
@@ -19,12 +18,17 @@ tools:
 
 `server/` 目录下的所有代码，包括：
 
-- `cmd/server/` — CLI 入口和启动逻辑
-- `internal/config/` — 配置加载
+- `cmd/server/` — SFU + 信令入口（可用 `-cluster-config` + `-node`）
+- `cmd/dispatch/` — 独立调度进程
+- `configs/` — 共享集群表示例（`cluster.example.toml`）
+- `internal/config/` — SFU 运行时配置
+- `internal/dispatch/` — 集群表加载与按房间选节点
 - `internal/signaling/` — WebSocket 信令处理
 - `internal/sfu/` — Pion WebRTC SFU 媒体路由
 - `internal/room/` — 房间管理（创建/加入/离开/销毁）
 - `pkg/proto/` — 公共消息结构体
+
+概念边界（调度 vs 信令 vs 媒体、ICE / SDP）见 `docs/concepts.md`。
 
 ## 技术要求
 
@@ -52,7 +56,9 @@ tools:
 
 ```bash
 cd server
-go run ./cmd/server                    # 启动服务
+go run ./cmd/server -cluster-config configs/cluster.example.toml -node n1
+go run ./cmd/dispatch -config configs/cluster.example.toml
 go test ./...                          # 运行全部测试
+go test ./internal/dispatch/ -v        # 调度 / 集群表
 go test ./internal/room/ -v            # 测试单个包
 ```
