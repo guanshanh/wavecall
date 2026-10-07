@@ -1,0 +1,42 @@
+# Go
+server/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Node
+client/node_modules/
+client/dist/
+client/.vite/
+*.tsbuildinfo
+
+# Rust / Tauri
+client/src-tauri/target/
+client/src-tauri/gen/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build output
+*.tar.gz
+*.zip
