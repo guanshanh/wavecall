@@ -23,6 +23,8 @@ export class WebRTCManager {
   private micPromise: Promise<MediaStream> | null = null;
   private localTrackAdded = false;
   private callbacks: WebRTCCallbacks | null = null;
+  /** Desired mute when tracks do not exist yet (e.g. PTT join before getUserMedia). */
+  private desiredMuted = false;
   /** Trickle ICE may arrive before the server offer is applied. */
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
 
@@ -65,6 +67,7 @@ export class WebRTCManager {
       })
       .then((stream) => {
         this.localStream = stream;
+        this.applyDesiredMuted();
         return stream;
       });
     return this.micPromise;
@@ -129,10 +132,15 @@ export class WebRTCManager {
     }
   }
 
-  /** Mute or unmute local audio. */
+  /** Mute or unmute local audio. Remembers desired state if mic is not ready. */
   setMuted(muted: boolean): void {
+    this.desiredMuted = muted;
+    this.applyDesiredMuted();
+  }
+
+  private applyDesiredMuted(): void {
     this.localStream?.getAudioTracks().forEach((track) => {
-      track.enabled = !muted;
+      track.enabled = !this.desiredMuted;
     });
   }
 
@@ -142,6 +150,7 @@ export class WebRTCManager {
     this.localStream = null;
     this.micPromise = null;
     this.localTrackAdded = false;
+    this.desiredMuted = false;
     this.pendingRemoteCandidates = [];
     this.peerConnection?.close();
     this.peerConnection = null;

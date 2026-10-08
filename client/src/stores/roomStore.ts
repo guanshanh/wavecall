@@ -25,6 +25,7 @@ interface RoomState {
   removePeer: (userId: string) => void;
   setPeerMuted: (userId: string, muted: boolean) => void;
   toggleMute: () => void;
+  setMuted: (muted: boolean) => void;
   reset: () => void;
 }
 
@@ -58,6 +59,8 @@ export const useRoomStore = create<RoomState>((set) => ({
     })),
 
   toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
+
+  setMuted: (muted) => set({ isMuted: muted }),
 
   reset: () =>
     set({

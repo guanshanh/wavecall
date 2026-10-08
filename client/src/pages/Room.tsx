@@ -10,6 +10,10 @@ import { resolveSignalingWsUrl } from "../lib/dispatch";
 import type { ConnectionState } from "../lib/signaling";
 import UserCard from "../components/UserCard";
 import Controls from "../components/Controls";
+import { useVoiceStore } from "../stores/voiceStore";
+import { formatPttKeyLabel } from "../lib/voiceMode";
+import { isTauri } from "../lib/tauriEnv";
+import { usePttHotkeys } from "../hooks/usePttHotkeys";
 
 export default function Room() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -25,8 +29,18 @@ export default function Room() {
   const addPeer = useRoomStore((s) => s.addPeer);
   const removePeer = useRoomStore((s) => s.removePeer);
   const setPeerMuted = useRoomStore((s) => s.setPeerMuted);
-  const toggleMuteStore = useRoomStore((s) => s.toggleMute);
+  const setMutedStore = useRoomStore((s) => s.setMuted);
   const resetStore = useRoomStore((s) => s.reset);
+
+  const voiceMode = useVoiceStore((s) => s.mode);
+  const pttKey = useVoiceStore((s) => s.pttKey);
+  const isCapturingKey = useVoiceStore((s) => s.isCapturingKey);
+  const isPttHeld = useVoiceStore((s) => s.isHeld);
+  const hotkeyError = useVoiceStore((s) => s.hotkeyError);
+  const voiceDispatch = useVoiceStore((s) => s.dispatch);
+  const mutedFromVoice = useVoiceStore((s) => s.muted);
+
+  usePttHotkeys();
 
   const [connectionStatus, setConnectionStatus] = useState<string>("正在连接服务器...");
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
@@ -245,6 +259,21 @@ export default function Room() {
   sendRef.current = send;
   disconnectRef.current = disconnect;
 
+  const applyMute = useCallback(
+    (muted: boolean) => {
+      setMutedStore(muted);
+      setMuted(muted);
+      sendRef.current({ type: muted ? "mute" : "unmute" });
+    },
+    [setMutedStore, setMuted],
+  );
+
+  useEffect(() => {
+    if (mutedFromVoice !== isMuted) {
+      applyMute(mutedFromVoice);
+    }
+  }, [mutedFromVoice, isMuted, applyMute]);
+
   // 进入页面发送 join 请求
   useEffect(() => {
     if (!userName || !roomId || !token) {
@@ -275,12 +304,8 @@ export default function Room() {
     navigate("/");
   };
 
-  // 切换静音
   const handleToggleMute = () => {
-    const nextMuted = !isMuted;
-    toggleMuteStore();
-    setMuted(nextMuted);
-    send({ type: nextMuted ? "mute" : "unmute" });
+    voiceDispatch({ type: "muteButton" });
   };
 
   return (
@@ -352,8 +377,17 @@ export default function Room() {
       {/* Controls */}
       <Controls
         isMuted={isMuted}
+        voiceMode={voiceMode}
+        pttKeyLabel={formatPttKeyLabel(pttKey)}
+        isCapturingKey={isCapturingKey}
+        isPttHeld={isPttHeld}
+        isTauri={isTauri()}
+        hotkeyError={hotkeyError}
         onToggleMute={handleToggleMute}
         onLeave={handleLeave}
+        onVoiceModeChange={(mode) => voiceDispatch({ type: "setMode", mode })}
+        onStartCaptureKey={() => voiceDispatch({ type: "startCapture" })}
+        onCancelCaptureKey={() => voiceDispatch({ type: "cancelCapture" })}
       />
     </div>
   );
