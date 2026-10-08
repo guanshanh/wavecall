@@ -73,6 +73,7 @@ hooks/useAudio.ts   → 音频设备枚举、切换、音量检测
 cd client
 npm run dev           # 纯 Web 开发模式（Vite dev server）
 npm run tauri dev     # Tauri 桌面开发模式（含 Rust 编译）
-npm run build         # 生产构建
+npm run build         # Web 生产构建（client/dist，给服务端 -web 托管）
 npm run tauri build   # 打包桌面安装程序
+# 或在仓库根目录：bash scripts/build-desktop.sh
 ```

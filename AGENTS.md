@@ -49,6 +49,9 @@ cd client && npm run tauri dev
 
 # 客户端（纯 Web 开发模式，无需 Rust 环境）
 cd client && npm run dev
+
+# 桌面端安装包（当前系统；读 client/.env 的 VITE_DISPATCH_URL）
+bash scripts/build-desktop.sh
 ```
 
 默认 `VITE_DISPATCH_URL=http://127.0.0.1:18090`。用户可在登录页「服务器地址」修改；成功登录后写入 localStorage，优先于构建默认。
