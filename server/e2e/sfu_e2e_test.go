@@ -16,6 +16,7 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/guanshanh/wavecall/internal/auth"
 	"github.com/guanshanh/wavecall/internal/config"
 	"github.com/guanshanh/wavecall/internal/room"
 	"github.com/guanshanh/wavecall/internal/signaling"
@@ -31,6 +32,7 @@ var payloadMagic = uint64(0x5741564543414C4C) // "WAVECALL"
 type fakeBrowser struct {
 	t    *testing.T
 	name string
+	token string
 
 	conn   *websocket.Conn
 	userID string
@@ -110,6 +112,7 @@ func (b *fakeBrowser) join(roomID string) proto.JoinedMessage {
 		Type:     proto.TypeJoin,
 		RoomID:   roomID,
 		UserName: b.name,
+		Token:    b.token,
 	})
 	select {
 	case msg := <-b.joinedCh:
@@ -344,8 +347,16 @@ func TestSFUAudioForwardingSinglePort(t *testing.T) {
 }
 
 func runForwardingScenario(t *testing.T, cfg *config.Config) {
+	users, err := auth.NewDirectory("e2e-secret", []auth.User{{Account: "e2e", Password: "e2e-pass"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := users.Issue("e2e", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
 	manager := room.NewManager()
-	handler, err := signaling.NewHandler(manager, cfg)
+	handler, err := signaling.NewHandler(manager, cfg, users)
 	if err != nil {
 		t.Fatalf("new signaling handler: %v", err)
 	}
@@ -362,6 +373,7 @@ func runForwardingScenario(t *testing.T, cfg *config.Config) {
 	// A 加入并发布音频
 	a := newFakeBrowser(t, "alice", wsURL)
 	defer a.conn.Close()
+	a.token = token
 	a.join(roomID)
 	select {
 	case sdp := <-a.offerCh:
@@ -374,6 +386,7 @@ func runForwardingScenario(t *testing.T, cfg *config.Config) {
 	// B 加入：初始 offer 应已包含 A 的音频轨（无需重协商）
 	bob := newFakeBrowser(t, "bob", wsURL)
 	defer bob.conn.Close()
+	bob.token = token
 	bob.join(roomID)
 	select {
 	case sdp := <-bob.offerCh:

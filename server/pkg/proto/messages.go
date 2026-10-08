@@ -35,6 +35,7 @@ type JoinMessage struct {
 	RoomID   string      `json:"roomId"`
 	UserName string      `json:"userName"`
 	Password string      `json:"password,omitempty"`
+	Token    string      `json:"token,omitempty"`
 }
 
 // LeaveMessage is sent when a client leaves the room.

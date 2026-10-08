@@ -9,6 +9,9 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig({
   plugins: [react(), tailwindcss()],
 
+  // Relative asset paths so the production bundle loads inside Tauri
+  base: "./",
+
   // prevent vite from obscuring rust errors
   clearScreen: false,
 

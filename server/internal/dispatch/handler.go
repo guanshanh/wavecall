@@ -3,16 +3,20 @@ package dispatch
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/guanshanh/wavecall/internal/auth"
 )
 
 type Handler struct {
-	tab *Table
+	tab   *Table
+	users *auth.Directory
 }
 
-func NewHandler(tab *Table) http.Handler {
-	h := &Handler{tab: tab}
+func NewHandler(tab *Table, users *auth.Directory) http.Handler {
+	h := &Handler{tab: tab, users: users}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/dispatch", h.handleDispatch)
+	mux.HandleFunc("/login", h.handleLogin)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))

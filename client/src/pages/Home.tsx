@@ -1,11 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Login from "./Login";
+import { useAuthStore } from "../stores/authStore";
 
 export default function Home() {
+  const token = useAuthStore((s) => s.token);
+  const account = useAuthStore((s) => s.account);
+  const clear = useAuthStore((s) => s.clear);
   const navigate = useNavigate();
   const [roomId, setRoomId] = useState("");
   const [userName, setUserName] = useState("");
   const [password, setPassword] = useState("");
+
+  if (!token || !account) {
+    return <Login />;
+  }
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,6 +28,13 @@ export default function Home() {
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">🌊 Wavecall</h1>
           <p className="text-gray-400">轻量语音，开黑必备</p>
+        </div>
+
+        <div className="flex items-center justify-between mb-4 text-sm text-gray-400">
+          <span>{account}</span>
+          <button type="button" onClick={clear} className="text-gray-300 hover:text-white cursor-pointer">
+            退出
+          </button>
         </div>
 
         <form onSubmit={handleJoin} className="space-y-4">

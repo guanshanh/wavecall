@@ -33,7 +33,7 @@ scp -r dist/. user@<server-ip>:/opt/wavecall/web/
 推荐与调度器共用同一份集群表（见下文），用 `-cluster-config` + `-node` 启动：
 
 ```bash
-./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web
+./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web -users /opt/wavecall/users.toml
 ```
 
 | flag | 默认值 | 说明 |
@@ -45,6 +45,7 @@ scp -r dist/. user@<server-ip>:/opt/wavecall/web/
 | `-udp-port` | 18081 | 媒体 UDPMux 端口；未显式指定且表中 `udp_port`≠0 时用表内值 |
 | `-stun` | （空） | 可选 STUN 回退 |
 | `-web` | （空） | Web 客户端静态文件目录（SPA 回退） |
+| `-users` | `configs/users.toml` | 与调度器同一份用户名单；缺失、空 `secret` 或没有账号时进程退出 |
 
 本地快速调试仍可不用集群表，直接传 `-port` / `-public-ip` / `-udp-port`。
 
@@ -61,7 +62,7 @@ scp -r dist user@<server-ip>:/opt/wavecall/web
 ```
 
 ```bash
-./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web
+./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web -users /opt/wavecall/users.toml
 ```
 
 > 不设置 `-web` 时服务端仅提供信令（配合 `npm run dev` 本地开发）；客户端仍须配置 `VITE_DISPATCH_URL`。
@@ -81,7 +82,7 @@ Description=Wavecall SFU server
 After=network-online.target
 
 [Service]
-ExecStart=/opt/wavecall/wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web
+ExecStart=/opt/wavecall/wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web -users /opt/wavecall/users.toml
 Restart=always
 RestartSec=3
 User=wavecall
@@ -129,9 +130,11 @@ udp_port = 18081
 ```
 
 ```bash
-./wavecall-dispatch -config /opt/wavecall/cluster.toml
-./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web
+./wavecall-dispatch -config /opt/wavecall/cluster.toml -users /opt/wavecall/users.toml
+./wavecall-server -cluster-config /opt/wavecall/cluster.toml -node n1 -web /opt/wavecall/web -users /opt/wavecall/users.toml
 ```
+
+将 `server/configs/users.example.toml` 复制为服务器上的 `/opt/wavecall/users.toml`，不要把真名单放进仓库。密码以原文写在 TOML 中。修改用户名单后需重启调度器与全部 SFU 节点。
 
 客户端构建时必须设置 `VITE_DISPATCH_URL` 为调度器对外基址（如 `https://dispatch.example.com` 或 `http://<server-ip>:18090`），见 `client/.env.example`。
 
@@ -141,7 +144,7 @@ udp_port = 18081
 |------|------|------|
 | SFU 信令 / 健康检查 | 18080 | TCP |
 | SFU WebRTC 媒体 | 18081 | UDP |
-| 调度器 `GET /dispatch`、`/health` | 18090 | TCP |
+| 调度器 `GET /dispatch`、`POST /login`、`/health` | 18090 | TCP |
 
 ## 防火墙 / 安全组
 

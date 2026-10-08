@@ -179,11 +179,14 @@ SFU 用 **同一份** `cluster.toml`，通过 `-cluster-config` + `-node` 读取
 ## 一次进房串起来
 
 ```
+0. POST 调度 /login { account, password }
+   ← { token, account }
+
 1. GET 调度 /dispatch?room=xxx
    ← {"node":"sfu1.example.com:18080"}
 
 2. WebSocket → ws(s)://sfu1.example.com:18080/ws
-   → join
+   → join { roomId, userName, password, token }
    ← joined（userId、peers、iceServers）
    ← offer（SDP）
    → answer（SDP）

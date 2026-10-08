@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/guanshanh/wavecall/internal/auth"
 	"github.com/guanshanh/wavecall/internal/config"
 	"github.com/guanshanh/wavecall/internal/dispatch"
 	"github.com/guanshanh/wavecall/internal/room"
@@ -26,6 +27,7 @@ func main() {
 	webDir := flag.String("web", "", "directory of web client static files (enables static hosting)")
 	clusterConfig := flag.String("cluster-config", "", "shared cluster TOML (same file as dispatch -config)")
 	nodeID := flag.String("node", "", "node id in cluster config (e.g. n1); requires -cluster-config")
+	usersPath := flag.String("users", "configs/users.toml", "path to users.toml (same file as dispatch -users)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -36,8 +38,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	users, err := auth.Load(*usersPath)
+	if err != nil {
+		slog.Error("load users", "err", err)
+		os.Exit(1)
+	}
+
 	manager := room.NewManager()
-	handler, err := signaling.NewHandler(manager, cfg)
+	handler, err := signaling.NewHandler(manager, cfg, users)
 	if err != nil {
 		slog.Error("failed to create signaling handler", "err", err)
 		os.Exit(1)

@@ -39,7 +39,8 @@
   "type": "join",
   "roomId": "room-123",
   "userName": "玩家A",
-  "password": "optional-password"
+  "password": "optional-password",
+  "token": "登录令牌"
 }
 ```
 
@@ -48,6 +49,7 @@
 | roomId | string | ✅ | 房间 ID |
 | userName | string | ✅ | 显示昵称 |
 | password | string | ❌ | 房间密码，无密码则为空 |
+| token | string | ✅ | 调度 POST /login 签发的登录令牌 |
 
 ### leave
 
@@ -202,6 +204,7 @@
 | code | 说明 |
 |------|------|
 | `INVALID_PARAM` | 房间号或昵称为空 |
+| `UNAUTHORIZED` | 登录令牌缺失、无效、过期，或账号已从名单删除 |
 | `WRONG_PASSWORD` | 密码错误 |
 | `ROOM_FULL` | 房间已满（最多 5 人） |
 | `PEER_SETUP_FAILED` | SFU PeerConnection 或初始协商失败 |
@@ -213,13 +216,15 @@
 ```
 客户端 A          调度器
   │                 │
+  │── POST /login { account, password } ──▶│
+  │◀── { token, account } ─────────────────│
   │── GET /dispatch?room= ──▶│
   │◀── {"node":"host:port"} ─│
 
 客户端 A                        SFU                          客户端 B
   │                               │                            │
   │──── WebSocket connect ───────▶│                            │
-  │──── join { roomId, userName } ▶│ 创建/查找房间，分配 userId
+  │──── join { roomId, userName, password, token } ▶│ SFU 先校验 token，再校验房间密码；创建/查找房间，分配 userId
   │◀── joined { userId, peers } ──│──▶ peerJoined → 其他客户端
   │                               │                            │
   │◀── offer (初始, S→C) ─────────│ 创建 PeerConnection
@@ -241,3 +246,5 @@
   │──── leave ───────────────────▶│──▶ peerLeft → 其他客户端
   │◀── WebSocket close ──────────│
 ```
+
+SFU 先校验 `token`，再校验房间密码。`GET /dispatch` 不带令牌。

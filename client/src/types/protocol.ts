@@ -30,6 +30,7 @@ export interface JoinMessage {
   roomId: string;
   userName: string;
   password?: string;
+  token?: string;
 }
 
 export interface LeaveMessage {

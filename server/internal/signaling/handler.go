@@ -14,6 +14,7 @@ import (
 	"github.com/pion/ice/v2"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/guanshanh/wavecall/internal/auth"
 	"github.com/guanshanh/wavecall/internal/config"
 	"github.com/guanshanh/wavecall/internal/room"
 	"github.com/guanshanh/wavecall/internal/sfu"
@@ -30,6 +31,7 @@ var upgrader = websocket.Upgrader{
 type Handler struct {
 	manager *room.Manager
 	config  *config.Config
+	users   *auth.Directory
 	mu      sync.Mutex
 
 	// api 非 nil 表示已启用单端口媒体复用：SettingEngine 携带 ICE UDPMux，
@@ -53,10 +55,14 @@ type clientMeta struct {
 // NewHandler creates a new signaling handler. When cfg.UDPPort > 0 all peer
 // connections share one UDP socket (UDPMux); with cfg.PublicIP set, host
 // candidates are rewritten to the public IP so no STUN server is needed.
-func NewHandler(manager *room.Manager, cfg *config.Config) (*Handler, error) {
+func NewHandler(manager *room.Manager, cfg *config.Config, users *auth.Directory) (*Handler, error) {
+	if users == nil {
+		return nil, fmt.Errorf("user directory is required")
+	}
 	h := &Handler{
 		manager:     manager,
 		config:      cfg,
+		users:       users,
 		roomClients: make(map[string]map[string]*Client),
 		clientMeta:  make(map[*Client]clientMeta),
 	}
@@ -187,6 +193,16 @@ func (h *Handler) routeMessage(client *Client, raw []byte) {
 
 // handleJoin processes a join request.
 func (h *Handler) handleJoin(client *Client, msg *proto.JoinMessage) {
+	if _, err := h.users.Verify(msg.Token, time.Now()); err != nil {
+		slog.Warn("join unauthorized")
+		_ = client.Send(proto.ErrorMessage{
+			Type:    proto.TypeError,
+			Code:    "UNAUTHORIZED",
+			Message: "登录已失效，请重新登录",
+		})
+		return
+	}
+
 	if msg.RoomID == "" || msg.UserName == "" {
 		_ = client.Send(proto.ErrorMessage{
 			Type:    proto.TypeError,

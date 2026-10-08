@@ -30,7 +30,7 @@
 
 ### 启动服务端（SFU + 调度器）
 
-本地进房需要**同时**跑 SFU 与调度器，并在客户端配置 `VITE_DISPATCH_URL`。
+本地进房需要**同时**跑 SFU 与调度器；客户端默认 `VITE_DISPATCH_URL=http://127.0.0.1:18090`，也可在登录页「服务器地址」覆盖。
 
 ```bash
 # 终端 1：SFU（从共享集群表读 n1 的 public_ip / udp_port / 端口）
@@ -57,7 +57,7 @@ npm run dev
 
 ```bash
 cd client
-cp .env.example .env   # 与 Web 模式相同，填写 VITE_DISPATCH_URL
+cp .env.example .env   # 可选；默认 VITE_DISPATCH_URL=http://127.0.0.1:18090，登录页「服务器地址」可覆盖
 npm install
 npm run tauri dev
 ```

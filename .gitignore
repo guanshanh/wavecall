@@ -33,6 +33,9 @@ client/src-tauri/gen/
 Thumbs.db
 desktop.ini
 
+# Local user roster. Copy server/configs/users.example.toml and edit it.
+server/configs/users.toml
+
 # Environment
 .env
 .env.local

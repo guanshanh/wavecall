@@ -65,6 +65,6 @@ echo "==> [5/5] 上传集群表示例（请复制为 cluster.toml 并按环境�
 scp "${SCP_OPTS[@]}" "$CLUSTER_EXAMPLE" "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_DIR}/cluster.example.toml"
 
 echo "==> 完成。示例启动："
-echo "    ${DEPLOY_DIR}/wavecall-dispatch -config ${DEPLOY_DIR}/cluster.toml"
-echo "    ${DEPLOY_DIR}/wavecall-server -cluster-config ${DEPLOY_DIR}/cluster.toml -node n1 -web ${DEPLOY_DIR}/web"
+echo "    ${DEPLOY_DIR}/wavecall-dispatch -config ${DEPLOY_DIR}/cluster.toml -users ${DEPLOY_DIR}/users.toml"
+echo "    ${DEPLOY_DIR}/wavecall-server -cluster-config ${DEPLOY_DIR}/cluster.toml -node n1 -web ${DEPLOY_DIR}/web -users ${DEPLOY_DIR}/users.toml"
 echo "    ssh -p ${DEPLOY_PORT} ${DEPLOY_USER}@${DEPLOY_HOST} 'systemctl restart wavecall'"

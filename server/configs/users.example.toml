@@ -1,0 +1,5 @@
+secret = "replace-with-a-long-random-string"
+
+[[users]]
+account = "guanshan"
+password = "change-me"

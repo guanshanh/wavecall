@@ -36,18 +36,22 @@ wavecall/
 ## 开发命令
 
 ```bash
-# SFU + 信令（与调度共用集群表）
-cd server && go run ./cmd/server -cluster-config configs/cluster.example.toml -node n1
+# 先复制 server/configs/users.example.toml 为 server/configs/users.toml，填入 secret 和账号
+
+# SFU + 信令（与调度共用集群表与用户名单）
+cd server && go run ./cmd/server -cluster-config configs/cluster.example.toml -node n1 -users configs/users.toml
 
 # 调度器（客户端进房前必问；单节点也要跑）
-cd server && go run ./cmd/dispatch -config configs/cluster.example.toml
+cd server && go run ./cmd/dispatch -config configs/cluster.example.toml -users configs/users.toml
 
-# 客户端（Tauri 桌面模式；需 client/.env 里的 VITE_DISPATCH_URL）
+# 客户端（Tauri 桌面模式；VITE_DISPATCH_URL 可选，默认 http://127.0.0.1:18090，登录页「服务器地址」可覆盖）
 cd client && npm run tauri dev
 
 # 客户端（纯 Web 开发模式，无需 Rust 环境）
 cd client && npm run dev
 ```
+
+默认 `VITE_DISPATCH_URL=http://127.0.0.1:18090`。用户可在登录页「服务器地址」修改；成功登录后写入 localStorage，优先于构建默认。
 
 ## 编码规范
 

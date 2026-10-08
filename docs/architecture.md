@@ -71,9 +71,10 @@ SFU、PeerConnection、ICE、SDP、STUN/TURN、调度与媒体地址等名词说
 ### 进房与信令（先调度，再 WebSocket）
 
 ```
+POST /login → { token, account }
 GET /dispatch?room=… → {"node":"host:port"}
     → 对该节点建立 WebSocket
-    → join → joined（含 userId、已有成员、iceServers）
+    → join（含 token 与房间密码）→ joined（含 userId、已有成员、iceServers）
     → 服务端发 offer（S→C），客户端回 answer（C→S）
     → candidate 双向 Trickle ICE
     → 新人发布音频时，服务端再发一次重协商 offer

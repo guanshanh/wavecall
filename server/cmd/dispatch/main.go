@@ -8,11 +8,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/guanshanh/wavecall/internal/auth"
 	"github.com/guanshanh/wavecall/internal/dispatch"
 )
 
 func main() {
 	configPath := flag.String("config", "configs/cluster.example.toml", "path to shared cluster TOML (dispatch + nodes)")
+	usersPath := flag.String("users", "configs/users.toml", "path to users.toml (same file as the SFU -users)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -29,7 +31,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &http.Server{Addr: cfg.Bind, Handler: dispatch.NewHandler(tab)}
+	users, err := auth.Load(*usersPath)
+	if err != nil {
+		slog.Error("load users", "err", err)
+		os.Exit(1)
+	}
+	srv := &http.Server{Addr: cfg.Bind, Handler: dispatch.NewHandler(tab, users)}
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

@@ -1,11 +1,12 @@
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useCallback, useState, useRef } from "react";
 import { useRoomStore } from "../stores/roomStore";
+import { useAuthStore } from "../stores/authStore";
 import { useSignaling } from "../hooks/useSignaling";
 import { useWebRTC } from "../hooks/useWebRTC";
 import { AudioLevelMonitor } from "../lib/audioLevels";
 import type { ClientMessage, ServerMessage } from "../types/protocol";
-import { isDispatchConfigError, resolveSignalingWsUrl } from "../lib/dispatch";
+import { resolveSignalingWsUrl } from "../lib/dispatch";
 import type { ConnectionState } from "../lib/signaling";
 import UserCard from "../components/UserCard";
 import Controls from "../components/Controls";
@@ -35,6 +36,9 @@ export default function Room() {
   // useSignaling/useRoomStore resolve — refs let later values reach earlier closures.
   const userId = useRoomStore((s) => s.userId);
   const sendRef = useRef<(msg: ClientMessage) => void>(() => {});
+  const disconnectRef = useRef<() => void>(() => {});
+  const token = useAuthStore((s) => s.token);
+  const clearAuth = useAuthStore((s) => s.clear);
   const userIdRef = useRef<string | null>(null);
   userIdRef.current = userId;
 
@@ -70,10 +74,10 @@ export default function Room() {
     reset();
     monitorRef.current?.clear();
     setRemoteStreams(new Map());
-    if (roomId && userName) {
-      sendRef.current({ type: "join", roomId, userName, password });
+    if (roomId && userName && token) {
+      sendRef.current({ type: "join", roomId, userName, password, token });
     }
-  }, [reset, roomId, userName, password]);
+  }, [reset, roomId, userName, password, token]);
 
   // WebRTC → 信令出口：answer / candidate 发回服务端
   setCallbacks({
@@ -99,17 +103,6 @@ export default function Room() {
       dispatchFailedRef.current = false;
       return url;
     } catch (e) {
-      if (isDispatchConfigError(e)) {
-        dispatchFailedRef.current = false;
-        const msg =
-          e instanceof Error
-            ? e.message.replace(/^DispatchConfigError:/, "").trim()
-            : "未配置 VITE_DISPATCH_URL";
-        setConnectionStatus(
-          `${msg}（请在 client/.env 设置后重启 dev 服务）`,
-        );
-        throw e;
-      }
       dispatchFailedRef.current = true;
       setConnectionStatus("无法联系调度服务，正在重试...");
       throw e;
@@ -185,6 +178,13 @@ export default function Room() {
           break;
 
         case "error":
+          if (msg.code === "UNAUTHORIZED") {
+            clearAuth();
+            disconnectRef.current();
+            resetStore();
+            navigate("/");
+            break;
+          }
           alert(`进入房间失败: ${msg.message}`);
           resetStore();
           navigate("/");
@@ -196,6 +196,7 @@ export default function Room() {
     },
     [
       navigate,
+      clearAuth,
       setConnected,
       setPeers,
       addPeer,
@@ -231,11 +232,7 @@ export default function Room() {
     } else if (state === "disconnected") {
       setConnectionStatus("已断开连接");
     } else if (state === "error") {
-      setConnectionStatus((prev) =>
-        prev.includes("VITE_DISPATCH_URL")
-          ? prev
-          : "未配置 VITE_DISPATCH_URL（请在 client/.env 设置后重启 dev 服务）",
-      );
+      setConnectionStatus("无法联系调度服务");
     }
   }, [rejoin]);
 
@@ -246,10 +243,11 @@ export default function Room() {
   );
 
   sendRef.current = send;
+  disconnectRef.current = disconnect;
 
   // 进入页面发送 join 请求
   useEffect(() => {
-    if (!userName || !roomId) {
+    if (!userName || !roomId || !token) {
       navigate("/");
       return;
     }
@@ -259,6 +257,7 @@ export default function Room() {
       roomId,
       userName,
       password,
+      token,
     });
 
     return () => {
@@ -266,7 +265,7 @@ export default function Room() {
       disconnect();
       resetStore();
     };
-  }, [userName, roomId, password, navigate, send, disconnect, resetStore]);
+  }, [userName, roomId, password, token, navigate, send, disconnect, resetStore]);
 
   // 挂断退出
   const handleLeave = () => {
